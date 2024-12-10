@@ -24,7 +24,7 @@ html end
 
 Compiled:
 
-```ht
+```html
 <html>
 <head>
 <title>
