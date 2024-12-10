@@ -2,7 +2,7 @@
 
 An easy way to write your messy html code in a better way:
 
-```ztml
+```python
 #define:name:Rohan
 
 #include:navbar:navbar.html
