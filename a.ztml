@@ -1,0 +1,17 @@
+html
+
+head
+    title
+        {Ztml}
+    title end
+head end
+
+body
+    div style="color:blue;"
+        h1
+            {Hello, How are you?}
+        h1 end
+    div end
+body end
+
+html end
