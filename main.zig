@@ -49,6 +49,8 @@ pub fn main() !void {
         std.log.err("Input file not found: \"{s}\"", .{input_file});
         std.process.exit(1);
     };
+    var variables = std.StringArrayHashMap([]const u8).init(allocator);
+    defer variables.deinit();
     defer input_file_handle.close();
 
     var line_count: u16 = 0;
@@ -65,7 +67,7 @@ pub fn main() !void {
         };
         defer buf_stream.reset();
         const input_line = buf_stream.getWritten();
-        defer allocator.free(input_line);
+        // defer allocator.free(input_line);
         const line = std.mem.trim(u8, input_line, " ");
 
         if (line.len == 0 or std.mem.startsWith(u8, line, "//")) continue;
@@ -83,6 +85,37 @@ pub fn main() !void {
                 defer allocator.free(replaced_string_level_2);
                 try resulting_html.appendSlice(replaced_string_level_2);
             }
+        } else if (std.mem.startsWith(u8, line, "#define")) {
+            var iter = std.mem.splitScalar(u8, line, ':');
+            _ = iter.next().?;
+            var variable_name: []const u8 = undefined;
+            var variable_content: []const u8 = undefined;
+            if (iter.next()) |var_name| {
+                variable_name = var_name;
+            } else {
+                std.log.err("You have made some mistake in variable declaration in line number: {}.\n", .{line_count});
+                std.log.err("The correct way of declaring variable is:\n", .{});
+                std.log.err("#define:variable_name:Variable content\n", .{});
+                std.process.exit(1);
+            }
+            if (iter.next()) |var_content| {
+                variable_content = var_content;
+            } else {
+                std.log.err("You have made some mistake in variable declaration in line number: {}.\n", .{line_count});
+                std.log.err("The correct way of declaring variable is:\n", .{});
+                std.log.err("#define:variable_name:Variable content\n", .{});
+                std.process.exit(1);
+            }
+            std.debug.print("What data I am putting here: {s}:{s}\n", .{ variable_name, variable_content });
+            try variables.put(variable_name, variable_content);
+        } else if (std.mem.startsWith(u8, line, "%")) {
+            var iter = std.mem.splitScalar(u8, line, '%');
+            _ = iter.next().?;
+            const variable_name = iter.next().?;
+            for (variables.keys(), variables.values()) |ok, ov| {
+                std.debug.print("Data I am recieving: {s}:{s}", .{ok, ov});
+            }
+            try resulting_html.appendSlice(variable_name);
         } else if (line_as_tokens.len > 1 and std.mem.eql(u8, line_as_tokens[1], "end")) {
             try resulting_html.appendSlice("</");
             try resulting_html.appendSlice(line_as_tokens[0]);
@@ -111,9 +144,8 @@ pub fn main() !void {
 
     if (started_tags > ended_tags) {
         std.debug.print("Warning: Number of tags you created don't have their corresponding ending tags!\n", .{});
-    }
-    if (started_tags < ended_tags) {
+    } else if (started_tags < ended_tags) {
         std.debug.print("Warning: Number of ending tags are greater than the number of starting tags.\n", .{});
     }
-    std.debug.print("Generated {s}.\n", .{output_file});
+    std.debug.print("\nGenerated {s}.\n", .{output_file});
 }
