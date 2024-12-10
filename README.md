@@ -2,7 +2,7 @@
 
 An easy way to write your messy html code in a better way:
 
-```python
+```c
 #define:name:Rohan
 
 #include:navbar:navbar.html
