@@ -3,6 +3,10 @@
 An easy way to write your messy html code in a better way:
 
 ```ztml
+#define:name:Rohan
+
+#include:navbar:navbar.html
+
 html
 
 head
@@ -12,33 +16,16 @@ head
 head end
 
 body
+    %navbar
     div style="color:blue;"
         h1
             {Hello, How are you?}
+            %name
         h1 end
     div end
 body end
 
 html end
-```
-
-Compiled:
-
-```html
-<html>
-<head>
-<title>
-Ztml
-</title>
-</head>
-<body>
-<div style="color:blue;">
-<h1>
-Hello, How are you?
-</h1>
-</div>
-</body>
-</html>
 ```
 
 # How to use Ztml?
@@ -48,10 +35,10 @@ git clone https://github.com/RohanVashisht1234/ztml
 cd ztml
 zig build-exe ./main.zig -O ReleaseFast  
 ```
-### To compile a Ztml file to html:
+### Run example:
 
 ```shell
-./main ./some.ztml ./output.html
+./main ./example/index.ztml ./output.html
 ```
 
 ### Featues:
@@ -62,6 +49,10 @@ zig build-exe ./main.zig -O ReleaseFast
       - Warning: Number of tags starting is greater than the number of tags ending.
       - Warning: Number of tags ending is greater than the number of starting tags.
     - Helps make reliable html
+- Use variables
+    - This will help you save a lot of time.
+- Import components
+    - This again saves a lot of time and increases readability.
 
 
 ### Todo:

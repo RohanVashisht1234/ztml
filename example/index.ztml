@@ -1,0 +1,31 @@
+// Define variables
+
+#define:title:Ztml
+#define:Name:Rohan Vashisht
+#define:projectName:Ztml
+
+// Use #include to insert data from ztml files
+
+#include:head:./example/head.ztml
+#include:navbar:./example/navbar.ztml
+#include:footer:./example/footer.ztml
+
+html
+
+// The title variable will automatically be passed to head.ztml
+%head
+
+body
+    %navbar
+        div style="color:blue;"
+            h1
+                {This is:}
+                %projectName
+                {made by:}
+                %Name
+            h1 end
+        div end
+    %footer
+body end
+
+html end

@@ -11,16 +11,16 @@ pub fn tokenizeLine(allocator: std.mem.Allocator, line: []const u8) ![][]const u
     return try list.toOwnedSlice();
 }
 
-pub fn parser(allocator: std.mem.Allocator, input_file: []const u8) ![]const u8 {
+pub fn parser(variables: *std.StringArrayHashMap([]const u8), allocator: std.mem.Allocator, input_file: []const u8) ![]const u8 {
+    var variables_storage = variables.*;
     var resulting_html = std.ArrayList(u8).init(allocator);
-    defer resulting_html.deinit();
+    errdefer resulting_html.deinit();
     // Read file line by line
     var input_file_handle = std.fs.cwd().openFile(input_file, .{}) catch {
         std.log.err("Input file not found: \"{s}\"", .{input_file});
         std.process.exit(1);
     };
-    var variables = std.StringArrayHashMap([]const u8).init(allocator);
-    defer variables.deinit();
+
     defer input_file_handle.close();
 
     var line_count: u16 = 0;
@@ -70,23 +70,34 @@ pub fn parser(allocator: std.mem.Allocator, input_file: []const u8) ![]const u8 
                 std.log.err("#define:variable_name:Variable content\n", .{});
                 std.process.exit(1);
             };
-            if (std.mem.startsWith(u8, variable_content, "!")) {
-                const file_name = variable_content[1..];
-                const actual_content = try parser(allocator, file_name);
-
-                const key = try allocator.dupe(u8, variable_name);
-                const value = try allocator.dupe(u8, actual_content);
-                try variables.put(key, value);
-            } else {
-                const key = try allocator.dupe(u8, variable_name);
-                const value = try allocator.dupe(u8, variable_content);
-                try variables.put(key, value);
-            }
+            const key = try allocator.dupe(u8, variable_name);
+            const value = try allocator.dupe(u8, variable_content);
+            try variables_storage.put(key, value);
+        } else if (std.mem.startsWith(u8, line, "#include")) {
+            var iter = std.mem.splitScalar(u8, line, ':');
+            _ = iter.next().?;
+            const variable_name = iter.next() orelse {
+                std.log.err("You have made some mistake in variable declaration in line number: {}.\n", .{line_count});
+                std.log.err("The correct way of declaring variable is:\n", .{});
+                std.log.err("#include:variable_name:file_name\n", .{});
+                std.process.exit(1);
+            };
+            const file_name = iter.next() orelse {
+                std.log.err("You have made some mistake in variable declaration in line number: {}.\n", .{line_count});
+                std.log.err("The correct way of declaring variable is:\n", .{});
+                std.log.err("#include:variable_name:file_name\n", .{});
+                std.process.exit(1);
+            };
+            const actual_content = try parser(variables, allocator, file_name);
+            defer allocator.free(actual_content);
+            const key = try allocator.dupe(u8, variable_name);
+            const value = try allocator.dupe(u8, actual_content);
+            try variables_storage.put(key, value);
         } else if (std.mem.startsWith(u8, line, "%")) {
             var iter = std.mem.splitScalar(u8, line, '%');
             _ = iter.next().?;
             const variable_name = iter.next().?;
-            try resulting_html.appendSlice(variables.get(variable_name).?);
+            try resulting_html.appendSlice(variables_storage.get(variable_name).?);
         } else if (line_as_tokens.len > 1 and std.mem.eql(u8, line_as_tokens[1], "end")) {
             try resulting_html.appendSlice("</");
             try resulting_html.appendSlice(line_as_tokens[0]);
@@ -108,15 +119,15 @@ pub fn parser(allocator: std.mem.Allocator, input_file: []const u8) ![]const u8 
     }
 
     if (started_tags > ended_tags) {
-        std.debug.print("Warning: Number of tags you created don't have their corresponding ending tags in file: {s}!\n", .{input_file});
+        std.log.warn("Warning: Number of tags you created don't have their corresponding ending tags in file: {s}!\n", .{input_file});
     } else if (started_tags < ended_tags) {
-        std.debug.print("Warning: Number of ending tags are greater than the number of starting tags in file: {s}!\n", .{input_file});
+        std.log.warn("Warning: Number of ending tags are greater than the number of starting tags in file: {s}!\n", .{input_file});
     }
-    defer for (variables.keys(), variables.values()) |key, value| {
+    defer for (variables_storage.keys(), variables_storage.values()) |key, value| {
         allocator.free(key);
         allocator.free(value);
     };
-    return resulting_html.toOwnedSlice();
+    return try resulting_html.toOwnedSlice();
 }
 
 pub fn main() !void {
@@ -145,11 +156,19 @@ pub fn main() !void {
         if (deinit_status == .leak) @panic("Code contains bugs.");
     }
 
+    var variables = std.StringArrayHashMap([]const u8).init(allocator);
+    defer variables.deinit();
+    const result = try parser(&variables, allocator, input_file);
+    defer allocator.free(result);
     try std.fs.cwd().writeFile(.{
         .sub_path = output_file,
-        .data = try parser(allocator, input_file),
+        .data = result,
         .flags = .{},
     });
+    defer for (variables.keys(), variables.values()) |key, value| {
+        allocator.free(key);
+        allocator.free(value);
+    };
 
     std.debug.print("\nGenerated {s}.\n", .{output_file});
 }
