@@ -16,6 +16,7 @@ head
 head end
 
 body
+    // Component:
     %navbar
     div style="color:blue;"
         h1
