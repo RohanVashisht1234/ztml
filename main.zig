@@ -11,37 +11,7 @@ pub fn tokenizeLine(allocator: std.mem.Allocator, line: []const u8) ![][]const u
     return try list.toOwnedSlice();
 }
 
-pub fn main() !void {
-    // Get sys args
-    var args = std.process.args();
-    _ = args.skip();
-    var input_file: [:0]const u8 = undefined;
-    var output_file: [:0]const u8 = undefined;
-
-    if (args.next()) |input_file_name| {
-        input_file = input_file_name;
-    } else {
-        std.log.err("Input file not specified", .{});
-        std.process.exit(1);
-    }
-    if (args.next()) |output_file_name| {
-        output_file = output_file_name;
-    } else {
-        std.log.err("Output file not specified", .{});
-        std.process.exit(1);
-    }
-    if (args.next()) |extra_unnessecary_argument| {
-        std.log.err("An extra unnessecary argument was added: {s}", .{extra_unnessecary_argument});
-        std.process.exit(1);
-    }
-
-    // Permanent allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        const deinit_status = gpa.deinit();
-        if (deinit_status == .leak) @panic("Code contains bugs.");
-    }
+pub fn parser(allocator: std.mem.Allocator, input_file: []const u8) ![]const u8 {
     var resulting_html = std.ArrayList(u8).init(allocator);
     defer resulting_html.deinit();
     // Read file line by line
@@ -88,34 +58,35 @@ pub fn main() !void {
         } else if (std.mem.startsWith(u8, line, "#define")) {
             var iter = std.mem.splitScalar(u8, line, ':');
             _ = iter.next().?;
-            var variable_name: []const u8 = undefined;
-            var variable_content: []const u8 = undefined;
-            if (iter.next()) |var_name| {
-                variable_name = var_name;
-            } else {
+            const variable_name = iter.next() orelse {
                 std.log.err("You have made some mistake in variable declaration in line number: {}.\n", .{line_count});
                 std.log.err("The correct way of declaring variable is:\n", .{});
                 std.log.err("#define:variable_name:Variable content\n", .{});
                 std.process.exit(1);
-            }
-            if (iter.next()) |var_content| {
-                variable_content = var_content;
-            } else {
+            };
+            const variable_content = iter.next() orelse {
                 std.log.err("You have made some mistake in variable declaration in line number: {}.\n", .{line_count});
                 std.log.err("The correct way of declaring variable is:\n", .{});
                 std.log.err("#define:variable_name:Variable content\n", .{});
                 std.process.exit(1);
+            };
+            if (std.mem.startsWith(u8, variable_content, "!")) {
+                const file_name = variable_content[1..];
+                const actual_content = try parser(allocator, file_name);
+
+                const key = try allocator.dupe(u8, variable_name);
+                const value = try allocator.dupe(u8, actual_content);
+                try variables.put(key, value);
+            } else {
+                const key = try allocator.dupe(u8, variable_name);
+                const value = try allocator.dupe(u8, variable_content);
+                try variables.put(key, value);
             }
-            std.debug.print("What data I am putting here: {s}:{s}\n", .{ variable_name, variable_content });
-            try variables.put(variable_name, variable_content);
         } else if (std.mem.startsWith(u8, line, "%")) {
             var iter = std.mem.splitScalar(u8, line, '%');
             _ = iter.next().?;
             const variable_name = iter.next().?;
-            for (variables.keys(), variables.values()) |ok, ov| {
-                std.debug.print("Data I am recieving: {s}:{s}", .{ok, ov});
-            }
-            try resulting_html.appendSlice(variable_name);
+            try resulting_html.appendSlice(variables.get(variable_name).?);
         } else if (line_as_tokens.len > 1 and std.mem.eql(u8, line_as_tokens[1], "end")) {
             try resulting_html.appendSlice("</");
             try resulting_html.appendSlice(line_as_tokens[0]);
@@ -136,16 +107,49 @@ pub fn main() !void {
         }
     }
 
+    if (started_tags > ended_tags) {
+        std.debug.print("Warning: Number of tags you created don't have their corresponding ending tags in file: {s}!\n", .{input_file});
+    } else if (started_tags < ended_tags) {
+        std.debug.print("Warning: Number of ending tags are greater than the number of starting tags in file: {s}!\n", .{input_file});
+    }
+    defer for (variables.keys(), variables.values()) |key, value| {
+        allocator.free(key);
+        allocator.free(value);
+    };
+    return resulting_html.toOwnedSlice();
+}
+
+pub fn main() !void {
+    // Get sys args
+    var args = std.process.args();
+    _ = args.skip();
+
+    const input_file = args.next() orelse {
+        std.log.err("Input file not specified", .{});
+        std.process.exit(1);
+    };
+    const output_file = args.next() orelse {
+        std.log.err("Input file not specified", .{});
+        std.process.exit(1);
+    };
+    if (args.next()) |extra_unnessecary_argument| {
+        std.log.err("An extra unnessecary argument was added: {s}", .{extra_unnessecary_argument});
+        std.process.exit(1);
+    }
+
+    // Permanent allocator
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        const deinit_status = gpa.deinit();
+        if (deinit_status == .leak) @panic("Code contains bugs.");
+    }
+
     try std.fs.cwd().writeFile(.{
         .sub_path = output_file,
-        .data = resulting_html.items,
+        .data = try parser(allocator, input_file),
         .flags = .{},
     });
 
-    if (started_tags > ended_tags) {
-        std.debug.print("Warning: Number of tags you created don't have their corresponding ending tags!\n", .{});
-    } else if (started_tags < ended_tags) {
-        std.debug.print("Warning: Number of ending tags are greater than the number of starting tags.\n", .{});
-    }
     std.debug.print("\nGenerated {s}.\n", .{output_file});
 }
