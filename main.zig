@@ -17,6 +17,7 @@ pub fn main() !void {
     _ = args.skip();
     var input_file: [:0]const u8 = undefined;
     var output_file: [:0]const u8 = undefined;
+
     if (args.next()) |input_file_name| {
         input_file = input_file_name;
     } else {
@@ -50,23 +51,25 @@ pub fn main() !void {
     };
     defer input_file_handle.close();
 
-    var input_file_reader = input_file_handle.reader();
     var line_count: u16 = 0;
     var started_tags: u16 = 0; // Count the number of tags that are starting
     var ended_tags: u16 = 0; // Count the number of tags that are ending
 
-    while (true) {
-        var buf = std.ArrayList(u8).init(allocator);
-        errdefer buf.deinit();
-        try input_file_reader.streamUntilDelimiter(buf.writer(), '\n', 1024);
-        line_count += 1;
-        const input_line = try buf.toOwnedSlice();
+    var buf: [1024]u8 = undefined;
+    var buf_stream = std.io.fixedBufferStream(&buf);
+    var eof = false;
+    while (!eof) : (line_count += 1) {
+        input_file_handle.reader().streamUntilDelimiter(buf_stream.writer(), '\n', 1024) catch |e| switch (e) {
+            error.EndOfStream => eof = true,
+            else => break,
+        };
+        defer buf_stream.reset();
+        const input_line = buf_stream.getWritten();
         defer allocator.free(input_line);
         const line = std.mem.trim(u8, input_line, " ");
 
-        if (line.len == 0 or std.mem.startsWith(u8, line, "//")) {
-            continue;
-        }
+        if (line.len == 0 or std.mem.startsWith(u8, line, "//")) continue;
+
         const line_as_tokens = try tokenizeLine(allocator, line);
         defer allocator.free(line_as_tokens);
         if (std.mem.startsWith(u8, line, "{")) {
@@ -81,11 +84,9 @@ pub fn main() !void {
                 try resulting_html.appendSlice(replaced_string_level_2);
             }
         } else if (line_as_tokens.len > 1 and std.mem.eql(u8, line_as_tokens[1], "end")) {
-            try resulting_html.append('<');
-            try resulting_html.append('/');
+            try resulting_html.appendSlice("</");
             try resulting_html.appendSlice(line_as_tokens[0]);
-            try resulting_html.append('>');
-            try resulting_html.append('\n');
+            try resulting_html.appendSlice(">\n");
             ended_tags += 1;
         } else if (line_as_tokens.len > 0 and std.mem.eql(u8, line_as_tokens[line_as_tokens.len - 1], "end")) {
             try resulting_html.append('<');
@@ -93,9 +94,7 @@ pub fn main() !void {
                 try resulting_html.appendSlice(token);
                 try resulting_html.append(' ');
             }
-            try resulting_html.append('/');
-            try resulting_html.append('>');
-            try resulting_html.append('\n');
+            try resulting_html.appendSlice("/>\n");
         } else {
             try resulting_html.append('<');
             try resulting_html.appendSlice(line);
@@ -105,15 +104,16 @@ pub fn main() !void {
     }
 
     try std.fs.cwd().writeFile(.{
-        .path = output_file,
+        .sub_path = output_file,
         .data = resulting_html.items,
+        .flags = .{},
     });
 
     if (started_tags > ended_tags) {
-        std.debug.print("Warning: Number of tags you created don't have their corresponding ending tags!", .{});
+        std.debug.print("Warning: Number of tags you created don't have their corresponding ending tags!\n", .{});
     }
     if (started_tags < ended_tags) {
-        std.debug.print("Warning: Number of ending tags are greater than the number of starting tags.", .{});
+        std.debug.print("Warning: Number of ending tags are greater than the number of starting tags.\n", .{});
     }
-    std.debug.print("Generated {s}.", .{output_file});
+    std.debug.print("Generated {s}.\n", .{output_file});
 }
