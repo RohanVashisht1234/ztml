@@ -14,7 +14,7 @@ pub fn tokenizeLine(allocator: std.mem.Allocator, line: []const u8) ![][]const u
 pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator: std.mem.Allocator, input_file: []const u8, recursion: bool) ![]const u8 {
     var resulting_html = std.ArrayList(u8).init(allocator);
     errdefer resulting_html.deinit();
-    if (recursion) {
+    if (!recursion) {
         try resulting_html.appendSlice("<!DOCTYPE html>");
     }
     // Read file line by line
