@@ -107,7 +107,7 @@ pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator:
             ended_tags += 1;
         } else if (line_as_tokens.len > 0 and std.mem.eql(u8, line_as_tokens[line_as_tokens.len - 1], "end")) {
             try resulting_html.append('<');
-            for (line_as_tokens) |token| {
+            for (line_as_tokens[0 .. line_as_tokens.len - 1]) |token| {
                 try resulting_html.appendSlice(token);
                 try resulting_html.append(' ');
             }
