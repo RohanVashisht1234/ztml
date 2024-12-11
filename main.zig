@@ -14,6 +14,7 @@ pub fn tokenizeLine(allocator: std.mem.Allocator, line: []const u8) ![][]const u
 pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator: std.mem.Allocator, input_file: []const u8) ![]const u8 {
     var resulting_html = std.ArrayList(u8).init(allocator);
     errdefer resulting_html.deinit();
+    try resulting_html.appendSlice("<!DOCTYPE html>");
     // Read file line by line
     var input_file_handle = std.fs.cwd().openFile(input_file, .{}) catch {
         std.log.err("Input file not found: \"{s}\"", .{input_file});
@@ -118,9 +119,11 @@ pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator:
     }
 
     if (started_tags > ended_tags) {
-        std.log.warn("Warning: Number of tags you created don't have their corresponding ending tags in file: {s}!\n", .{input_file});
+        std.log.warn("Number of tags you created don't have their corresponding ending tags in file: {s}!\n", .{input_file});
+        std.log.warn("Amount: Opening tags: {d} and Closing tags: {d}\n", .{ started_tags, ended_tags });
     } else if (started_tags < ended_tags) {
-        std.log.warn("Warning: Number of ending tags are greater than the number of starting tags in file: {s}!\n", .{input_file});
+        std.log.warn("Number of ending tags are greater than the number of starting tags in file: {s}!\n", .{input_file});
+        std.log.warn("Amount: Opening tags: {d} and Closing tags: {d}\n", .{ started_tags, ended_tags });
     }
     return try resulting_html.toOwnedSlice();
 }
