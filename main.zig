@@ -11,10 +11,12 @@ pub fn tokenizeLine(allocator: std.mem.Allocator, line: []const u8) ![][]const u
     return try list.toOwnedSlice();
 }
 
-pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator: std.mem.Allocator, input_file: []const u8) ![]const u8 {
+pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator: std.mem.Allocator, input_file: []const u8, recursion: bool) ![]const u8 {
     var resulting_html = std.ArrayList(u8).init(allocator);
     errdefer resulting_html.deinit();
-    try resulting_html.appendSlice("<!DOCTYPE html>");
+    if (recursion) {
+        try resulting_html.appendSlice("<!DOCTYPE html>");
+    }
     // Read file line by line
     var input_file_handle = std.fs.cwd().openFile(input_file, .{}) catch {
         std.log.err("Input file not found: \"{s}\"", .{input_file});
@@ -88,7 +90,7 @@ pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator:
                 std.log.err("#include:variable_name:file_name\n", .{});
                 std.process.exit(1);
             };
-            const actual_content = try parser(variables_storage, allocator, file_name);
+            const actual_content = try parser(variables_storage, allocator, file_name, true);
             defer allocator.free(actual_content);
             const key = try allocator.dupe(u8, variable_name);
             const value = try allocator.dupe(u8, actual_content);
@@ -139,7 +141,7 @@ pub fn engine(input_file: []const u8, output_file: []const u8) !void {
 
     var variables = std.StringArrayHashMap([]const u8).init(allocator);
     defer variables.deinit();
-    const result = try parser(&variables, allocator, input_file);
+    const result = try parser(&variables, allocator, input_file, false);
     defer allocator.free(result);
     try std.fs.cwd().writeFile(.{
         .sub_path = output_file,
@@ -181,7 +183,7 @@ pub fn parse_config_file(allocator: std.mem.Allocator, file_name: []const u8) !v
             const output_file = iter.next().?;
             var variables_storage = std.StringArrayHashMap([]const u8).init(allocator);
             defer variables_storage.deinit();
-            const output = try parser(&variables_storage, allocator, input_file);
+            const output = try parser(&variables_storage, allocator, input_file, false);
             defer allocator.free(output);
             var res = std.mem.splitBackwardsScalar(u8, output_file, '/');
             _ = res.next().?;
