@@ -125,24 +125,7 @@ pub fn parser(variables_storage: *std.StringArrayHashMap([]const u8), allocator:
     return try resulting_html.toOwnedSlice();
 }
 
-pub fn main() !void {
-    // Get sys args
-    var args = std.process.args();
-    _ = args.skip();
-
-    const input_file = args.next() orelse {
-        std.log.err("Input file not specified", .{});
-        std.process.exit(1);
-    };
-    const output_file = args.next() orelse {
-        std.log.err("Input file not specified", .{});
-        std.process.exit(1);
-    };
-    if (args.next()) |extra_unnessecary_argument| {
-        std.log.err("An extra unnessecary argument was added: {s}", .{extra_unnessecary_argument});
-        std.process.exit(1);
-    }
-
+pub fn engine(input_file: []const u8, output_file: []const u8) !void {
     // Permanent allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -166,4 +149,96 @@ pub fn main() !void {
     };
 
     std.debug.print("\nGenerated {s}.\n", .{output_file});
+}
+
+pub fn parse_config_file(allocator: std.mem.Allocator, file_name: []const u8) !void {
+    var input_file_handle = std.fs.cwd().openFile(file_name, .{}) catch {
+        std.log.err("Config file not found: \"{s}\"", .{file_name});
+        std.process.exit(1);
+    };
+
+    defer input_file_handle.close();
+
+    var buf: [1024]u8 = undefined;
+    var buf_stream = std.io.fixedBufferStream(&buf);
+    var eof = false;
+    while (!eof) {
+        input_file_handle.reader().streamUntilDelimiter(buf_stream.writer(), '\n', 1024) catch |e| switch (e) {
+            error.EndOfStream => eof = true,
+            else => break,
+        };
+        defer buf_stream.reset();
+        const input_line = buf_stream.getWritten();
+        const line = std.mem.trim(u8, input_line, " ");
+        if (line.len == 0 or std.mem.startsWith(u8, line, "//")) {
+            continue;
+        } else {
+            var iter = std.mem.splitScalar(u8, line, '=');
+            const input_file = iter.next().?;
+            const output_file = iter.next().?;
+            var variables_storage = std.StringArrayHashMap([]const u8).init(allocator);
+            defer variables_storage.deinit();
+            const output = try parser(&variables_storage, allocator, input_file);
+            defer allocator.free(output);
+            var res = std.mem.splitBackwardsScalar(u8, output_file, '/');
+            _ = res.next().?;
+            try std.fs.cwd().makePath(res.rest());
+            try std.fs.cwd().writeFile(.{
+                .sub_path = output_file,
+                .data = output,
+                .flags = .{},
+            });
+            defer for (variables_storage.keys(), variables_storage.values()) |key, value| {
+                allocator.free(key);
+                allocator.free(value);
+            };
+            std.debug.print("\nGenerated {s}.\n", .{output_file});
+        }
+    }
+}
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        const deinit_status = gpa.deinit();
+        if (deinit_status == .leak) @panic("Code contains bugs.");
+    }
+
+    var args = std.process.args();
+    _ = args.skip();
+
+    const input_file = args.next() orelse {
+        std.log.err("Input file not specified", .{});
+        std.process.exit(1);
+    };
+    if (std.mem.startsWith(u8, input_file, "-")) {
+        var iter = std.mem.splitScalar(u8, input_file, '-');
+        _ = iter.next().?;
+        if (iter.next()) |config_flag| {
+            var actual_config_flag = std.mem.splitScalar(u8, config_flag, '=');
+            if (std.mem.eql(u8, actual_config_flag.next().?, "config")) {
+                if (actual_config_flag.next()) |config_file_name| {
+                    std.debug.print("Choosing config file: {s}", .{config_file_name});
+                    try parse_config_file(allocator, config_file_name);
+                } else {
+                    std.debug.print("Unknown flag error", .{});
+                }
+            } else {
+                std.debug.print("Unknown flag error", .{});
+            }
+        } else {
+            std.debug.print("Unknown flag error", .{});
+        }
+    } else {
+        const output_file = args.next() orelse {
+            std.log.err("Output file not specified", .{});
+            std.process.exit(1);
+        };
+        if (args.next()) |extra_unnessecary_argument| {
+            std.log.err("An extra unnessecary argument was added: {s}", .{extra_unnessecary_argument});
+            std.process.exit(1);
+        }
+        try engine(input_file, output_file);
+    }
 }

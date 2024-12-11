@@ -39,9 +39,20 @@ zig build-exe ./main.zig -O ReleaseFast
 ### Run example:
 
 ```shell
-./main ./example/index.ztml ./output.html
+./main -config=./example/main.config
 ```
 
+You can also do:
+
+```shell
+./main -config=./example/main.config
+```
+Config file looks like:
+
+```rs
+// Input ztml file  =  Output ztml file
+./example/index.ztml=./build/index.html
+```
 ### Featues:
 
 - Helps code readibility
