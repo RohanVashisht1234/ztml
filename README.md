@@ -5,7 +5,7 @@ An easy way to write your messy html code in a better way:
 ```c
 #define:name:Rohan
 
-#include:navbar:navbar.html
+#include:navbar:navbar.ztml
 
 html
 
